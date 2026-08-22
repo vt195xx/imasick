@@ -155,6 +155,28 @@ end
 
 Library.Elements = Elements
 
+local function IsInsideWindow(Pos)
+	local Window = Library.Window
+	if not Window or not Window.Root.Visible then
+		return false
+	end
+	local AbsPos, AbsSize = Window.Root.AbsolutePosition, Window.Root.AbsoluteSize
+	return Pos.X >= AbsPos.X and Pos.X <= AbsPos.X + AbsSize.X and Pos.Y >= AbsPos.Y and Pos.Y <= AbsPos.Y + AbsSize.Y
+end
+
+Creator.AddSignal(UserInputService.InputBegan, function(Input)
+	if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+		local Pos = Vector2.new(Input.Position.X, Input.Position.Y)
+		if IsInsideWindow(Pos) then
+			if math.random() > 0.5 then
+				Creator.SnowflakeBurst(Pos, GUI)
+			else
+				Creator.LightningBurst(Pos, GUI)
+			end
+		end
+	end
+end)
+
 function Library:CreateWindow(Config)
 	assert(Config.Title, "Window - Missing Title")
 
@@ -171,6 +193,40 @@ function Library:CreateWindow(Config)
 		Acrylic.init()
 	end
 
+	local Splash = New("Frame", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.fromRGB(8, 8, 12),
+		BackgroundTransparency = 0,
+		ZIndex = 1000,
+		Parent = GUI,
+	})
+
+	local SplashScale = New("UIScale", { Scale = 0.94 })
+
+	local SplashText = New("TextLabel", {
+		Text = "Welcome to Parody Rise",
+		RichText = true,
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		TextTransparency = 1,
+		FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
+		TextSize = 30,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(0.8, 0.2),
+		BackgroundTransparency = 1,
+		ZIndex = 1001,
+		Parent = Splash,
+	}, {
+		SplashScale,
+	})
+
+	TweenService:Create(SplashText, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+		TextTransparency = 0,
+	}):Play()
+	TweenService:Create(SplashScale, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Scale = 1,
+	}):Play()
+
 	local Window = require(Components.Window)({
 		Parent = GUI,
 		Size = Config.Size,
@@ -178,6 +234,52 @@ function Library:CreateWindow(Config)
 		SubTitle = Config.SubTitle,
 		TabWidth = Config.TabWidth or 160,
 	})
+
+	Window.Root.Visible = false
+
+	task.delay(1, function()
+		TweenService:Create(SplashText, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+			TextTransparency = 1,
+		}):Play()
+		TweenService:Create(Splash, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1,
+		}):Play()
+
+		task.delay(0.25, function()
+			Splash:Destroy()
+			Window.Root.Visible = true
+
+			for _, Descendant in ipairs(Window.Root:GetDescendants()) do
+				if Descendant:IsA("GuiObject") and not Descendant:IsA("UIScale") then
+					local Goal = Descendant.BackgroundTransparency
+					Descendant.BackgroundTransparency = 1
+					TweenService:Create(
+						Descendant,
+						TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+						{ BackgroundTransparency = Goal }
+					):Play()
+				end
+				if Descendant:IsA("TextLabel") or Descendant:IsA("TextButton") or Descendant:IsA("TextBox") then
+					local Goal = Descendant.TextTransparency
+					Descendant.TextTransparency = 1
+					TweenService:Create(
+						Descendant,
+						TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+						{ TextTransparency = Goal }
+					):Play()
+				end
+				if Descendant:IsA("ImageLabel") or Descendant:IsA("ImageButton") then
+					local Goal = Descendant.ImageTransparency
+					Descendant.ImageTransparency = 1
+					TweenService:Create(
+						Descendant,
+						TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+						{ ImageTransparency = Goal }
+					):Play()
+				end
+			end
+		end)
+	end)
 
 	Library.Window = Window
 	Library:SetTheme(Library.Theme)
@@ -195,11 +297,48 @@ end
 function Library:Destroy()
 	if Library.Window then
 		Library.Unloaded = true
-		if Library.UseAcrylic then
-			Library.Window.AcrylicPaint.Model:Destroy()
+		local Root = Library.Window.Root
+
+		local RootScale = Root:FindFirstChildOfClass("UIScale")
+		if RootScale then
+			TweenService:Create(
+				RootScale,
+				TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+				{ Scale = 0.9 }
+			):Play()
 		end
-		Creator.Disconnect()
-		Library.GUI:Destroy()
+
+		for _, Descendant in ipairs(Root:GetDescendants()) do
+			if Descendant:IsA("GuiObject") then
+				TweenService:Create(
+					Descendant,
+					TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+					{ BackgroundTransparency = 1 }
+				):Play()
+			end
+			if Descendant:IsA("TextLabel") or Descendant:IsA("TextButton") or Descendant:IsA("TextBox") then
+				TweenService:Create(
+					Descendant,
+					TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+					{ TextTransparency = 1 }
+				):Play()
+			end
+			if Descendant:IsA("ImageLabel") or Descendant:IsA("ImageButton") then
+				TweenService:Create(
+					Descendant,
+					TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+					{ ImageTransparency = 1 }
+				):Play()
+			end
+		end
+
+		task.delay(0.24, function()
+			if Library.UseAcrylic then
+				Library.Window.AcrylicPaint.Model:Destroy()
+			end
+			Creator.Disconnect()
+			Library.GUI:Destroy()
+		end)
 	end
 end
 
@@ -929,6 +1068,7 @@ return function(Title, Desc, Parent, Hover)
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(14, 0),
 		Size = UDim2.new(1, -32, 0, 0),
+		ClipsDescendants = true,
 		ZIndex = 2,
 	}, {
 		New("UIListLayout", {
@@ -988,7 +1128,7 @@ return function(Title, Desc, Parent, Hover)
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Text = "",
 		LayoutOrder = 7,
-		ClipsDescendants = false,
+		ClipsDescendants = true,
 		ThemeTag = {
 			BackgroundColor3 = "Element",
 			BackgroundTransparency = "ElementTransparency",
@@ -1583,20 +1723,22 @@ function TabModule:SelectTab(Tab)
 	Window.TabDisplay.Text = TabModule.Tabs[Tab].Name
 	Window.SelectorPosMotor:setGoal(Spring(TabModule:GetCurrentTabPos(), Creator.SpringPresets.Bounce))
 
-	task.spawn(function()
-		Window.ContainerHolder.Parent = Window.ContainerAnim
+	Window.ContainerPosMotor:setGoal(Spring(15, Creator.SpringPresets.Snap))
+	Window.ContainerBackMotor:setGoal(Spring(1, Creator.SpringPresets.Snap))
 
-		Window.ContainerPosMotor:setGoal(Spring(15, Creator.SpringPresets.Snap))
-		Window.ContainerBackMotor:setGoal(Spring(1, Creator.SpringPresets.Snap))
-		task.wait(0.12)
+	TabModule.SwapToken = (TabModule.SwapToken or 0) + 1
+	local Token = TabModule.SwapToken
+
+	task.delay(0.1, function()
+		if TabModule.SwapToken ~= Token then
+			return
+		end
 		for _, Container in next, TabModule.Containers do
 			Container.Visible = false
 		end
 		TabModule.Containers[Tab].Visible = true
 		Window.ContainerPosMotor:setGoal(Spring(0, Creator.SpringPresets.Bounce))
 		Window.ContainerBackMotor:setGoal(Spring(0, { frequency = 8, dampingRatio = 0.9 }))
-		task.wait(0.12)
-		Window.ContainerHolder.Parent = Window.ContainerCanvas
 	end)
 end
 
@@ -2062,6 +2204,8 @@ return function(Config)
 	Window.ContainerAnim = New("CanvasGroup", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
+	}, {
+		Window.ContainerHolder,
 	})
 
 	Window.ContainerCanvas = New("Frame", {
@@ -2070,7 +2214,6 @@ return function(Config)
 		BackgroundTransparency = 1,
 	}, {
 		Window.ContainerAnim,
-		Window.ContainerHolder
 	})
 
 	local EntranceScale = New("UIScale", { Scale = 0.9 })
@@ -2573,6 +2716,100 @@ function Creator.AddGlow(Parent, Size, BaseTransparency)
 
 	local _, SetGlow = Creator.SpringMotor(BaseTransparency, Glow, "ImageTransparency", true)
 	return Glow, SetGlow
+end
+
+function Creator.SnowflakeBurst(Position, Parent)
+	local Colors = { Color3.fromRGB(255, 255, 255), Color3.fromRGB(214, 236, 255) }
+
+	local Holder = Creator.New("Frame", {
+		Size = UDim2.fromOffset(0, 0),
+		Position = UDim2.fromOffset(Position.X, Position.Y),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundTransparency = 1,
+		ZIndex = 200,
+		Parent = Parent,
+	})
+
+	for i = 1, 6 do
+		local Angle = (i - 1) * 60 + math.random(-8, 8)
+		local Radians = math.rad(Angle)
+
+		local Arm = Creator.New("Frame", {
+			Size = UDim2.fromOffset(2, 12),
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.fromOffset(0, 0),
+			Rotation = Angle,
+			BackgroundColor3 = Colors[math.random(1, #Colors)],
+			BackgroundTransparency = 0.05,
+			BorderSizePixel = 0,
+			ZIndex = 200,
+			Parent = Holder,
+		}, {
+			Creator.New("UICorner", { CornerRadius = UDim.new(1, 0) }),
+		})
+
+		local Distance = math.random(20, 38)
+		local TargetX = math.sin(Radians) * Distance
+		local TargetY = -math.cos(Radians) * Distance + math.random(6, 16)
+
+		TweenService:Create(Arm, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Position = UDim2.fromOffset(TargetX, TargetY),
+			Rotation = Angle + math.random(-45, 45),
+			BackgroundTransparency = 1,
+		}):Play()
+	end
+
+	game:GetService("Debris"):AddItem(Holder, 0.7)
+end
+
+function Creator.LightningBurst(Position, Parent)
+	local Flash = Creator.New("ImageLabel", {
+		Image = "rbxassetid://5028857084",
+		ScaleType = Enum.ScaleType.Slice,
+		SliceCenter = Rect.new(20, 20, 280, 280),
+		Size = UDim2.fromOffset(6, 6),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(Position.X, Position.Y),
+		BackgroundTransparency = 1,
+		ImageColor3 = Color3.fromRGB(190, 225, 255),
+		ImageTransparency = 0.05,
+		ZIndex = 200,
+		Parent = Parent,
+	})
+
+	TweenService:Create(Flash, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = UDim2.fromOffset(80, 80),
+		ImageTransparency = 1,
+	}):Play()
+	game:GetService("Debris"):AddItem(Flash, 0.35)
+
+	local X, Y = 0, -20
+	for i = 1, 5 do
+		local NextX = X + math.random(-9, 9)
+		local NextY = Y + 9
+		local Length = math.sqrt((NextX - X) ^ 2 + (NextY - Y) ^ 2)
+		local MidX = (X + NextX) / 2
+		local MidY = (Y + NextY) / 2
+
+		local Segment = Creator.New("Frame", {
+			Size = UDim2.fromOffset(2, Length),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromOffset(Position.X + MidX, Position.Y + MidY),
+			Rotation = math.random(-12, 12) + (i % 2 == 0 and 8 or -8),
+			BackgroundColor3 = Color3.fromRGB(220, 240, 255),
+			BackgroundTransparency = 0.1,
+			BorderSizePixel = 0,
+			ZIndex = 201,
+			Parent = Parent,
+		})
+
+		TweenService:Create(Segment, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1,
+		}):Play()
+		game:GetService("Debris"):AddItem(Segment, 0.28)
+
+		X, Y = NextX, NextY
+	end
 end
 
 function Creator.PressBounce(Button, PressScale, RestScale)
@@ -3243,6 +3480,7 @@ function Element:New(Idx, Config)
 		Value = Config.Default,
 		Multi = Config.Multi,
 		Buttons = {},
+		OptionOrder = {},
 		Opened = false,
 		Type = "Dropdown",
 		Callback = Config.Callback or function() end,
@@ -3354,8 +3592,9 @@ function Element:New(Idx, Config)
 		}),
 	})
 
-	local DropdownHolderCanvas = New("Frame", {
+	local DropdownHolderCanvas = New("CanvasGroup", {
 		BackgroundTransparency = 1,
+		GroupTransparency = 1,
 		Size = UDim2.fromOffset(170, 300),
 		Parent = self.Library.GUI,
 		Visible = false,
@@ -3419,20 +3658,56 @@ function Element:New(Idx, Config)
 	end)
 
 	local ScrollFrame = self.ScrollFrame
+	local CloseToken = 0
+
 	function Dropdown:Open()
 		Dropdown.Opened = true
+		CloseToken = CloseToken + 1
 		ScrollFrame.ScrollingEnabled = false
 		DropdownHolderCanvas.Visible = true
+		DropdownHolderFrame.Size = UDim2.fromScale(1, 0.6)
+		TweenService:Create(DropdownHolderCanvas, Creator.SmoothInfo, { GroupTransparency = 0 }):Play()
 		TweenService:Create(DropdownHolderFrame, Creator.BounceInfo, { Size = UDim2.fromScale(1, 1) }):Play()
 		TweenService:Create(DropdownIco, Creator.SmoothInfo, { Rotation = 180 }):Play()
+
+		for i, Option in ipairs(Dropdown.OptionOrder) do
+			if Option.Button.Parent then
+				Option.Scale.Scale = 0.7
+				Option.Label.TextTransparency = 1
+				local Delay = math.clamp((i - 1) * 0.025, 0, 0.25)
+				task.delay(Delay, function()
+					if not Option.Button.Parent or not Dropdown.Opened then
+						return
+					end
+					TweenService:Create(
+						Option.Scale,
+						TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+						{ Scale = 1 }
+					):Play()
+					TweenService:Create(
+						Option.Label,
+						TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+						{ TextTransparency = 0 }
+					):Play()
+				end)
+			end
+		end
 	end
 
 	function Dropdown:Close()
 		Dropdown.Opened = false
+		CloseToken = CloseToken + 1
+		local Token = CloseToken
 		ScrollFrame.ScrollingEnabled = true
 		DropdownHolderFrame.Size = UDim2.fromScale(1, 0.6)
-		DropdownHolderCanvas.Visible = false
+		TweenService:Create(DropdownHolderCanvas, Creator.SnapInfo, { GroupTransparency = 1 }):Play()
 		TweenService:Create(DropdownIco, Creator.SmoothInfo, { Rotation = 0 }):Play()
+
+		task.delay(0.18, function()
+			if CloseToken == Token then
+				DropdownHolderCanvas.Visible = false
+			end
+		end)
 	end
 
 	function Dropdown:Display()
@@ -3470,6 +3745,7 @@ function Element:New(Idx, Config)
 	function Dropdown:BuildDropdownList()
 		local Values = Dropdown.Values
 		local Buttons = {}
+		Dropdown.OptionOrder = {}
 
 		for _, Element in next, DropdownScrollFrame:GetChildren() do
 			if not Element:IsA("UIListLayout") then
@@ -3515,6 +3791,8 @@ function Element:New(Idx, Config)
 				},
 			})
 
+			local OptionScale = New("UIScale", { Scale = 1 })
+
 			local Button = New("TextButton", {
 				Size = UDim2.new(1, -5, 0, 32),
 				BackgroundTransparency = 1,
@@ -3527,10 +3805,13 @@ function Element:New(Idx, Config)
 			}, {
 				ButtonSelector,
 				ButtonLabel,
+				OptionScale,
 				New("UICorner", {
 					CornerRadius = UDim.new(0, 8),
 				}),
 			})
+
+			table.insert(Dropdown.OptionOrder, { Button = Button, Scale = OptionScale, Label = ButtonLabel })
 
 			local Selected
 
@@ -4188,8 +4469,6 @@ function Element:New(Idx, Config)
 		SliderRail,
 	})
 
-	-- Single motor drives both the dot position and the fill width from one
-	-- 0-1 fraction, so they never fall out of sync.
 	local FractionMotor = Flipper.SingleMotor.new(0)
 	FractionMotor:onStep(function(Fraction)
 		SliderDot.Position = UDim2.new(Fraction, -7, 0.5, 0)
@@ -4391,7 +4670,6 @@ function Element:New(Idx, Config)
 		):Play()
 		ToggleCircle.ImageTransparency = Toggle.Value and 0 or 0.5
 
-		-- Quick glow flash as feedback, settling back to a faint resting glow when on.
 		SetToggleGlow(Toggle.Value and 0.3 or 1, Creator.SpringPresets.Pop)
 		if Toggle.Value then
 			task.delay(0.18, function()
@@ -4423,7 +4701,6 @@ end
 return Element
 end)
 local N28 = NewNode('Icons', "ModuleScript", N1, function(script)
--- This file was @generated by Tarmac. It is not intended for manual editing.
 return {
 	assets = {
 		["lucide-accessibility"] = "rbxassetid://10709751939",
@@ -5352,7 +5629,6 @@ return function()
 
 		local expectedDeltaTime = RunService.RenderStepped:Wait()
 
-		-- Give it another frame, because connections tend to be invoked later than :Wait() calls
 		RunService.RenderStepped:Wait()
 
 		expect(argumentsProvided).to.be.ok()
@@ -5421,7 +5697,6 @@ function GroupMotor:step(deltaTime)
 	for _, motor in pairs(self._motors) do
 		local complete = motor:step(deltaTime)
 		if not complete then
-			-- If any of the sub-motors are incomplete, the group motor will not be complete either
 			allMotorsComplete = false
 		end
 	end
@@ -5605,7 +5880,7 @@ end
 
 function Linear:step(state, dt)
 	local position = state.value
-	local velocity = self._velocity -- Linear motion ignores the state's velocity
+	local velocity = self._velocity
 	local goal = self._targetValue
 
 	local dPos = dt * velocity
@@ -5953,11 +6228,6 @@ function Spring:step(state, dt)
 
 		local i = math.cos(f * c * dt)
 		local j = math.sin(f * c * dt)
-		--    sin(dt*f*c)/c
-		--    sin(a*c)/c
-		--    a - (a^3*c^2)/6 + (a^5*c^4)/120 + O(c^6)
-		--    a - (a^3*c^2)/6 + (a^5*c^4)/120
-		--    a + ((a*a)*(c*c)*(c*c)/20 - c*c)*(a*a*a)/6
 
 		local z
 		if c > EPS then
@@ -6389,7 +6659,6 @@ return {
 	Hover = Color3.fromRGB(150, 155, 165),
 	HoverChange = 0.075,
 
-	-- Premium glow / glass tokens
 	GlowAccent = Color3.fromRGB(196, 210, 228),
 	GlowSoft = Color3.fromRGB(255, 255, 255),
 	GlowStrength = 0.9,
