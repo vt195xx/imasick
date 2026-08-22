@@ -1323,14 +1323,6 @@ function Notification:New(Config)
 	end)
 	Creator.PressBounce(NewNotification.CloseButton, 0.85, 1)
 
-	local AccentBar = New("Frame", {
-		Size = UDim2.new(0, 3, 1, -20),
-		Position = UDim2.fromOffset(0, 10),
-		ThemeTag = { BackgroundColor3 = "GlowAccent" },
-	}, {
-		New("UICorner", { CornerRadius = UDim.new(1, 0) }),
-	})
-
 	local ProgressTrack, ProgressFill
 	if Config.Duration then
 		ProgressFill = New("Frame", {
@@ -1354,7 +1346,6 @@ function Notification:New(Config)
 		Position = UDim2.fromScale(1, 0),
 	}, {
 		NewNotification.AcrylicPaint.Frame,
-		AccentBar,
 		NewNotification.Title,
 		NewNotification.CloseButton,
 		NewNotification.LabelHolder,
@@ -1909,6 +1900,13 @@ function TabModule:SelectTab(Tab)
 			end
 			OldContainer.Visible = false
 			OldContainer.Position = UDim2.fromOffset(0, 0)
+
+			-- Forget that this tab's widgets were ever revealed, now that the
+			-- tab is hidden - so switching back to it plays the slide-in
+			-- entrance again instead of just popping the widgets in place.
+			for _, Widget in ipairs(CollectWidgets(OldContainer)) do
+				RevealedWidgets[Widget] = nil
+			end
 		end)
 	end
 end
