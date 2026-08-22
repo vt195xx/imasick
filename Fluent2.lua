@@ -193,75 +193,6 @@ function Library:CreateWindow(Config)
 		Acrylic.init()
 	end
 
-	local Splash = New("Frame", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Color3.fromRGB(8, 8, 12),
-		BackgroundTransparency = 0,
-		ZIndex = 1000,
-		Parent = GUI,
-	})
-
-	local SplashScale = New("UIScale", { Scale = 0.94 })
-
-	local SplashText = New("TextLabel", {
-		Text = "Welcome to ParodyRise Antbar",
-		RichText = true,
-		TextColor3 = Color3.fromRGB(255, 255, 255),
-		TextTransparency = 1,
-		FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
-		TextSize = 30,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.46),
-		Size = UDim2.fromScale(0.8, 0.2),
-		BackgroundTransparency = 1,
-		ZIndex = 1001,
-		Parent = Splash,
-	}, {
-		SplashScale,
-	})
-
-	-- "Initializing..." status line under the title, with an animated 0-3 dot tick.
-	local SplashSubText = New("TextLabel", {
-		Text = "Initializing",
-		RichText = true,
-		TextColor3 = Color3.fromRGB(190, 190, 197),
-		TextTransparency = 1,
-		FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal),
-		TextSize = 15,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.565),
-		Size = UDim2.fromScale(0.8, 0.08),
-		BackgroundTransparency = 1,
-		ZIndex = 1001,
-		Parent = Splash,
-	})
-
-	TweenService:Create(SplashText, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-		TextTransparency = 0,
-	}):Play()
-	TweenService:Create(SplashScale, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Scale = 1,
-	}):Play()
-	TweenService:Create(SplashSubText, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-		TextTransparency = 0.25,
-	}):Play()
-
-	-- Ticks "Initializing" -> "Initializing." -> ".." -> "..." on a loop while the
-	-- window is being built behind the splash. Stopped right before the fade-out.
-	local SplashLoading = true
-	task.spawn(function()
-		local Dots = 0
-		while SplashLoading do
-			SplashSubText.Text = "Initializing" .. string.rep(".", Dots)
-			Dots = (Dots + 1) % 4
-			task.wait(0.4)
-		end
-	end)
-
-	-- Let this frame render ("Welcome to ParodyRise Antbar") before we build the
-	-- (potentially heavy) window UI, otherwise both can pop in on the same frame.
-	task.wait()
-
 	local Window = require(Components.Window)({
 		Parent = GUI,
 		Size = Config.Size,
@@ -270,58 +201,39 @@ function Library:CreateWindow(Config)
 		TabWidth = Config.TabWidth or 160,
 	})
 
-	Window.Root.Visible = false
-
-	-- Hold on the splash for a full 6 seconds so "Welcome..." / "Initializing..."
-	-- actually gets read, then fade it away and reveal the window underneath.
-	task.delay(6, function()
-		SplashLoading = false
-
-		TweenService:Create(SplashText, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-			TextTransparency = 1,
-		}):Play()
-		TweenService:Create(SplashSubText, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-			TextTransparency = 1,
-		}):Play()
-		TweenService:Create(Splash, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-			BackgroundTransparency = 1,
-		}):Play()
-
-		task.delay(0.25, function()
-			Splash:Destroy()
-			Window.Root.Visible = true
-
-			for _, Descendant in ipairs(Window.Root:GetDescendants()) do
-				if Descendant:IsA("GuiObject") and not Descendant:IsA("UIScale") then
-					local Goal = Descendant.BackgroundTransparency
-					Descendant.BackgroundTransparency = 1
-					TweenService:Create(
-						Descendant,
-						TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-						{ BackgroundTransparency = Goal }
-					):Play()
-				end
-				if Descendant:IsA("TextLabel") or Descendant:IsA("TextButton") or Descendant:IsA("TextBox") then
-					local Goal = Descendant.TextTransparency
-					Descendant.TextTransparency = 1
-					TweenService:Create(
-						Descendant,
-						TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-						{ TextTransparency = Goal }
-					):Play()
-				end
-				if Descendant:IsA("ImageLabel") or Descendant:IsA("ImageButton") then
-					local Goal = Descendant.ImageTransparency
-					Descendant.ImageTransparency = 1
-					TweenService:Create(
-						Descendant,
-						TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-						{ ImageTransparency = Goal }
-					):Play()
-				end
-			end
-		end)
-	end)
+	-- No more splash/welcome screen. The window already has its own
+	-- entrance scale-bounce (see EntranceMotor in Window.lua) - we just
+	-- additionally fade its contents in from transparent so it doesn't
+	-- pop in as a flat, un-animated block.
+	for _, Descendant in ipairs(Window.Root:GetDescendants()) do
+		if Descendant:IsA("GuiObject") and not Descendant:IsA("UIScale") then
+			local Goal = Descendant.BackgroundTransparency
+			Descendant.BackgroundTransparency = 1
+			TweenService:Create(
+				Descendant,
+				TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{ BackgroundTransparency = Goal }
+			):Play()
+		end
+		if Descendant:IsA("TextLabel") or Descendant:IsA("TextButton") or Descendant:IsA("TextBox") then
+			local Goal = Descendant.TextTransparency
+			Descendant.TextTransparency = 1
+			TweenService:Create(
+				Descendant,
+				TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{ TextTransparency = Goal }
+			):Play()
+		end
+		if Descendant:IsA("ImageLabel") or Descendant:IsA("ImageButton") then
+			local Goal = Descendant.ImageTransparency
+			Descendant.ImageTransparency = 1
+			TweenService:Create(
+				Descendant,
+				TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{ ImageTransparency = Goal }
+			):Play()
+		end
+	end
 
 	Library.Window = Window
 	Library:SetTheme(Library.Theme)
@@ -1164,11 +1076,26 @@ return function(Title, Desc, Parent, Hover)
 		}),
 	})
 
+	-- Slot is the object that actually lives inside the tab/section's
+	-- UIListLayout. It's invisible and just reserves the vertical space.
+	-- Element.Frame lives INSIDE it and is free to slide left/right for the
+	-- tab-swap entrance animation without UIListLayout snapping its
+	-- Position back every frame (list layouts own the Position of their
+	-- direct children, so anything we want to slide has to be one level
+	-- deeper than the list).
+	Element.Slot = New("Frame", {
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		LayoutOrder = 7,
+		Parent = Parent,
+	})
+
 	Element.Frame = New("TextButton", {
 		Size = UDim2.new(1, 0, 0, 0),
 		BackgroundTransparency = 0.89,
 		BackgroundColor3 = Color3.fromRGB(130, 130, 130),
-		Parent = Parent,
+		Parent = Element.Slot,
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Text = "",
 		LayoutOrder = 7,
@@ -1187,6 +1114,11 @@ return function(Title, Desc, Parent, Hover)
 		Element.LabelHolder,
 	})
 
+	-- Marks this Frame as an animatable widget so the tab-swap transition
+	-- can find every Toggle/Button/Dropdown/etc. inside the incoming tab
+	-- (including ones nested inside Sections) and stagger their entrance.
+	Element.Frame:SetAttribute("FluentWidget", true)
+
 	function Element:SetTitle(Set)
 		Element.TitleLabel.Text = Set
 	end
@@ -1204,7 +1136,7 @@ return function(Title, Desc, Parent, Hover)
 	end
 
 	function Element:Destroy()
-		Element.Frame:Destroy()
+		Element.Slot:Destroy()
 	end
 
 	Element:SetTitle(Title)
@@ -1752,92 +1684,104 @@ function TabModule:New(Title, Icon, Parent)
 	return Tab
 end
 
--- Tab-switch reveal tuning: the outgoing tab fades out as a whole, then the
--- incoming tab's widgets slide in one by one, in the order they were arranged
--- (Toggle, then Button, then Dropdown, ...), each staggered 0.4s after the last
--- and overshooting slightly past its resting spot before settling back into place.
-local TAB_FADE_OUT_INFO = TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-local TAB_ELEMENT_SLIDE_OFFSET = 46
-local TAB_ELEMENT_STAGGER = 0.4
-local TAB_ELEMENT_SLIDE_INFO = TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-local TAB_ELEMENT_FADE_INFO = TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+-- How far (in pixels) the incoming/outgoing tab content slides during the swap.
+local TAB_SLIDE_OFFSET = 42
+local TAB_SLIDE_IN_INFO = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local TAB_SCALE_IN_INFO = TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+local TAB_SLIDE_OUT_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 
--- Fades every visual descendant of Container down to fully transparent, waits for
--- that to finish, hides the container, then restores everyone's transparency back
--- to what it was - so the next time this tab is revealed, RevealElement below
--- captures the *real* resting transparency instead of "faded to invisible".
-local function FadeOutContainer(Container, OnHidden)
-	local Original = {}
+-- ===== Per-element staggered entrance (Toggle / Button / Dropdown / ...) =====
+-- Every individual widget inside the incoming tab slides in from the left,
+-- fading in as it goes, then slightly overshoots past its resting spot and
+-- eases back - one widget after another instead of the whole tab popping
+-- in at once.
+local ELEMENT_SLIDE_OFFSET = 46
+local ELEMENT_STAGGER = 0.4 -- delay between each widget's entrance, in seconds
+-- Delay is capped so a tab with a LOT of widgets doesn't take forever to
+-- finish appearing - anything past the cap starts at the same time as the
+-- capped one. Raise/lower ELEMENT_STAGGER_CAP or ELEMENT_STAGGER above to
+-- taste.
+local ELEMENT_STAGGER_CAP = 2.0
+local ELEMENT_SLIDE_INFO = TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+local ELEMENT_FADE_INFO = TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 
+local function CollectWidgets(Container)
+	local Widgets = {}
 	for _, Descendant in ipairs(Container:GetDescendants()) do
-		if Descendant:IsA("GuiObject") and not Descendant:IsA("UIScale") then
-			local Entry = { BackgroundTransparency = Descendant.BackgroundTransparency }
-			if Descendant:IsA("TextLabel") or Descendant:IsA("TextButton") or Descendant:IsA("TextBox") then
-				Entry.TextTransparency = Descendant.TextTransparency
-			end
-			if Descendant:IsA("ImageLabel") or Descendant:IsA("ImageButton") then
-				Entry.ImageTransparency = Descendant.ImageTransparency
-			end
-			Original[Descendant] = Entry
-
-			local Goal = { BackgroundTransparency = 1 }
-			if Entry.TextTransparency then
-				Goal.TextTransparency = 1
-			end
-			if Entry.ImageTransparency then
-				Goal.ImageTransparency = 1
-			end
-			TweenService:Create(Descendant, TAB_FADE_OUT_INFO, Goal):Play()
+		if Descendant:GetAttribute("FluentWidget") then
+			table.insert(Widgets, Descendant)
 		end
 	end
-
-	task.delay(TAB_FADE_OUT_INFO.Time, function()
-		Container.Visible = false
-		for Descendant, Entry in next, Original do
-			for Prop, Value in next, Entry do
-				Descendant[Prop] = Value
-			end
-		end
-		if OnHidden then
-			OnHidden()
-		end
-	end)
+	return Widgets
 end
 
--- Slides Widget in from the left while fading its contents in, using a "Back"
--- ease so it overshoots slightly past its resting Position before settling.
-local function RevealWidget(Widget, Delay, Token, GetToken)
-	task.delay(Delay, function()
-		if GetToken() ~= Token or not Widget.Parent then
+-- Fades a single GuiObject/UIStroke's relevant transparency property in from
+-- fully invisible back to whatever it was meant to be, without touching
+-- anything it doesn't have.
+local function FadeDescendantIn(Descendant, TweenInfoObj)
+	if Descendant:IsA("GuiObject") and not Descendant:IsA("UIScale") then
+		local Goal = Descendant.BackgroundTransparency
+		if Goal < 1 then
+			Descendant.BackgroundTransparency = 1
+			TweenService:Create(Descendant, TweenInfoObj, { BackgroundTransparency = Goal }):Play()
+		end
+	end
+	if Descendant:IsA("TextLabel") or Descendant:IsA("TextButton") or Descendant:IsA("TextBox") then
+		local Goal = Descendant.TextTransparency
+		if Goal < 1 then
+			Descendant.TextTransparency = 1
+			TweenService:Create(Descendant, TweenInfoObj, { TextTransparency = Goal }):Play()
+		end
+	end
+	if Descendant:IsA("ImageLabel") or Descendant:IsA("ImageButton") then
+		local Goal = Descendant.ImageTransparency
+		if Goal < 1 then
+			Descendant.ImageTransparency = 1
+			TweenService:Create(Descendant, TweenInfoObj, { ImageTransparency = Goal }):Play()
+		end
+	end
+	if Descendant:IsA("UIStroke") then
+		local Goal = Descendant.Transparency
+		if Goal < 1 then
+			Descendant.Transparency = 1
+			TweenService:Create(Descendant, TweenInfoObj, { Transparency = Goal }):Play()
+		end
+	end
+end
+
+-- Slides + fades one widget in, after `Delay` seconds, and makes sure a
+-- rapid tab-swap (SwapToken changes mid-flight) doesn't leave it stuck
+-- hidden or mid-animation.
+local function AnimateWidgetIn(Widget, Delay, Token)
+	local OriginalPosition = Widget.Position
+
+	Widget.Position = OriginalPosition + UDim2.fromOffset(-ELEMENT_SLIDE_OFFSET, 0)
+
+	for _, Descendant in ipairs(Widget:GetDescendants()) do
+		FadeDescendantIn(Descendant, ELEMENT_FADE_INFO)
+	end
+	FadeDescendantIn(Widget, ELEMENT_FADE_INFO)
+
+	local function Play()
+		if TabModule.SwapToken ~= Token then
 			return
 		end
+		TweenService:Create(Widget, ELEMENT_SLIDE_INFO, { Position = OriginalPosition }):Play()
+	end
 
-		local RestPosition = Widget.Position
-		Widget.Position = RestPosition + UDim2.fromOffset(-TAB_ELEMENT_SLIDE_OFFSET, 0)
+	if Delay <= 0 then
+		Play()
+	else
+		task.delay(Delay, Play)
+	end
+end
 
-		local Original = {}
-		for _, Descendant in ipairs(Widget:GetDescendants()) do
-			if Descendant:IsA("GuiObject") and not Descendant:IsA("UIScale") then
-				local Entry = { BackgroundTransparency = Descendant.BackgroundTransparency }
-				if Descendant:IsA("TextLabel") or Descendant:IsA("TextButton") or Descendant:IsA("TextBox") then
-					Entry.TextTransparency = Descendant.TextTransparency
-				end
-				if Descendant:IsA("ImageLabel") or Descendant:IsA("ImageButton") then
-					Entry.ImageTransparency = Descendant.ImageTransparency
-				end
-				Original[Descendant] = Entry
-
-				for Prop in next, Entry do
-					Descendant[Prop] = 1
-				end
-			end
-		end
-
-		TweenService:Create(Widget, TAB_ELEMENT_SLIDE_INFO, { Position = RestPosition }):Play()
-		for Descendant, Entry in next, Original do
-			TweenService:Create(Descendant, TAB_ELEMENT_FADE_INFO, Entry):Play()
-		end
-	end)
+local function AnimateTabContentIn(Container, Token)
+	local Widgets = CollectWidgets(Container)
+	for Index, Widget in ipairs(Widgets) do
+		local Delay = math.min((Index - 1) * ELEMENT_STAGGER, ELEMENT_STAGGER_CAP)
+		AnimateWidgetIn(Widget, Delay, Token)
+	end
 end
 
 function TabModule:SelectTab(Tab)
@@ -1847,6 +1791,9 @@ function TabModule:SelectTab(Tab)
 	end
 
 	local PreviousTab = TabModule.SelectedTab
+	-- Slide towards the direction of travel in the tab list, like a page/stack transition.
+	local Direction = (PreviousTab ~= 0 and Tab < PreviousTab) and -1 or 1
+
 	TabModule.SelectedTab = Tab
 
 	for _, TabObject in next, TabModule.Tabs do
@@ -1865,41 +1812,46 @@ function TabModule:SelectTab(Tab)
 
 	TabModule.SwapToken = (TabModule.SwapToken or 0) + 1
 	local Token = TabModule.SwapToken
-	local function GetToken()
-		return TabModule.SwapToken
-	end
 
 	local NewTabObject = TabModule.Tabs[Tab]
 	local NewContainer = NewTabObject.ContainerFrame
 	local OldTabObject = PreviousTab ~= 0 and TabModule.Tabs[PreviousTab] or nil
 	local OldContainer = OldTabObject and OldTabObject.ContainerFrame or nil
 
-	local function RevealNewTab()
-		if GetToken() ~= Token then
-			return
-		end
+	-- Bring the incoming tab in immediately (no hidden gap/flicker) from the side,
+	-- with a light bounce-in scale, while the outgoing tab slides out the other way.
+	-- This only tweens Position/Scale on plain Frames, which is essentially free -
+	-- unlike animating a CanvasGroup's GroupTransparency every frame.
+	NewContainer.ZIndex = 2
+	NewContainer.Position = UDim2.fromOffset(TAB_SLIDE_OFFSET * Direction, 0)
+	NewTabObject.ContainerScale.Scale = 0.965
+	NewContainer.Visible = true
 
-		NewContainer.ZIndex = 2
-		NewContainer.Position = UDim2.fromOffset(0, 0)
-		NewTabObject.ContainerScale.Scale = 1
-		NewContainer.Visible = true
+	TweenService:Create(NewContainer, TAB_SLIDE_IN_INFO, {
+		Position = UDim2.fromOffset(0, 0),
+	}):Play()
+	TweenService:Create(NewTabObject.ContainerScale, TAB_SCALE_IN_INFO, {
+		Scale = 1,
+	}):Play()
 
-		-- Bring each widget in, in the order they're arranged top-to-bottom
-		-- (Toggle, Button, Dropdown, ...), 0.4s apart.
-		local Index = 0
-		for _, Widget in ipairs(NewContainer:GetChildren()) do
-			if Widget:IsA("GuiObject") and not Widget:IsA("UIScale") then
-				RevealWidget(Widget, Index * TAB_ELEMENT_STAGGER, Token, GetToken)
-				Index = Index + 1
-			end
-		end
-	end
+	-- Widgets inside the new tab (Toggle, Button, Dropdown, ...) each slide
+	-- in from the left and fade in, one after another, with a slight
+	-- overshoot as they settle - instead of just popping in all together.
+	AnimateTabContentIn(NewContainer, Token)
 
 	if OldContainer then
 		OldContainer.ZIndex = 1
-		FadeOutContainer(OldContainer, RevealNewTab)
-	else
-		RevealNewTab()
+		local SlideOut = TweenService:Create(OldContainer, TAB_SLIDE_OUT_INFO, {
+			Position = UDim2.fromOffset(-TAB_SLIDE_OFFSET * Direction, 0),
+		})
+		SlideOut:Play()
+		SlideOut.Completed:Once(function()
+			if TabModule.SwapToken ~= Token then
+				return
+			end
+			OldContainer.Visible = false
+			OldContainer.Position = UDim2.fromOffset(0, 0)
+		end)
 	end
 end
 
@@ -2780,6 +2732,16 @@ function Creator.GetThemeProperty(Property)
 	return Themes["Dark"][Property]
 end
 
+-- Applies theme-driven properties to a SINGLE object only. This is the
+-- cheap, local counterpart to Creator.UpdateTheme() (which re-applies colors
+-- to EVERY themed object in the whole UI and hard-resets every transparency
+-- motor to Instant). Use this whenever only one object's tags changed.
+function Creator.ApplyThemeProperties(Object, Properties)
+	for Property, ColorIdx in next, Properties do
+		Object[Property] = Creator.GetThemeProperty(ColorIdx)
+	end
+end
+
 function Creator.UpdateTheme()
 	for Instance, Object in next, Creator.Registry do
 		for Property, ColorIdx in next, Object.Properties do
@@ -2801,13 +2763,24 @@ function Creator.AddThemeObject(Object, Properties)
 	}
 
 	Creator.Registry[Object] = Data
-	Creator.UpdateTheme()
+	-- NOTE: this used to call the full Creator.UpdateTheme(), which loops
+	-- through every themed object that has EVER been created (hundreds of
+	-- them once a real window is built) and also snaps every hover/press
+	-- transparency motor straight to Instant. Since new themed objects are
+	-- created constantly during normal use (button ripples, dropdown
+	-- options, tab swaps, etc.), that meant clicking almost anything caused
+	-- a global "flash reset" of every other element's hover/glow/border
+	-- animation on screen - the stutter/disappearing-border bug. We only
+	-- need to color THIS new object; nothing else has changed.
+	Creator.ApplyThemeProperties(Object, Properties)
 	return Object
 end
 
 function Creator.OverrideTag(Object, Properties)
 	Creator.Registry[Object].Properties = Properties
-	Creator.UpdateTheme()
+	-- Same reasoning as above: only this object's tags changed, so only
+	-- re-color this object instead of the whole registry + motor reset.
+	Creator.ApplyThemeProperties(Object, Properties)
 end
 
 function Creator.New(Name, Properties, Children)
