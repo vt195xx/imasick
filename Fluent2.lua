@@ -227,6 +227,10 @@ function Library:CreateWindow(Config)
 		Scale = 1,
 	}):Play()
 
+	-- Let this frame render ("Welcome to Parody Rise") before we build the
+	-- (potentially heavy) window UI, otherwise both can pop in on the same frame.
+	task.wait()
+
 	local Window = require(Components.Window)({
 		Parent = GUI,
 		Size = Config.Size,
@@ -559,9 +563,9 @@ return function(props)
 		SliceCenter = Rect.new(20, 20, 280, 280),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(1, 46, 1, 46),
+		Size = UDim2.new(1, 52, 1, 52),
 		BackgroundTransparency = 1,
-		ImageTransparency = 0.6,
+		ImageTransparency = 0.46,
 		ZIndex = -1,
 		ThemeTag = {
 			ImageColor3 = "GlowAccent",
@@ -685,15 +689,15 @@ return function(props)
 		}),
 	})
 
-	local _, SetGlowBreath = Creator.SpringMotor(0.6, OuterGlow, "ImageTransparency", true)
+	local _, SetGlowBreath = Creator.SpringMotor(0.46, OuterGlow, "ImageTransparency", true)
 	task.spawn(function()
 		while OuterGlow:IsDescendantOf(game) do
-			SetGlowBreath(0.72, Creator.SpringPresets.Glow)
+			SetGlowBreath(0.58, Creator.SpringPresets.Glow)
 			task.wait(2.6)
 			if not OuterGlow:IsDescendantOf(game) then
 				break
 			end
-			SetGlowBreath(0.55, Creator.SpringPresets.Glow)
+			SetGlowBreath(0.38, Creator.SpringPresets.Glow)
 			task.wait(2.6)
 		end
 	end)
@@ -1037,7 +1041,9 @@ return function(Title, Desc, Parent, Hover)
 		Text = Title,
 		TextColor3 = Color3.fromRGB(240, 240, 240),
 		TextSize = 13,
+		TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
+		AutomaticSize = Enum.AutomaticSize.Y,
 		Size = UDim2.new(1, 0, 0, 14),
 		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 		BackgroundTransparency = 1,
@@ -1529,6 +1535,7 @@ return function(Title, Parent)
 end
 end)
 local N14 = NewNode('Tab', "ModuleScript", N7, function(script)
+local TweenService = game:GetService("TweenService")
 local Root = script.Parent.Parent
 local Flipper = require(Root.Packages.Flipper)
 local Creator = require(Root.Creator)
@@ -1636,6 +1643,8 @@ function TabModule:New(Title, Icon, Parent)
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	})
 
+	Tab.ContainerScale = New("UIScale", { Scale = 1 })
+
 	Tab.ContainerFrame = New("ScrollingFrame", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
@@ -1652,6 +1661,7 @@ function TabModule:New(Title, Icon, Parent)
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 	}, {
 		ContainerLayout,
+		Tab.ContainerScale,
 		New("UIPadding", {
 			PaddingRight = UDim.new(0, 10),
 			PaddingLeft = UDim.new(0, 1),
@@ -1704,8 +1714,21 @@ function TabModule:New(Title, Icon, Parent)
 	return Tab
 end
 
+-- How far (in pixels) the incoming/outgoing tab content slides during the swap.
+local TAB_SLIDE_OFFSET = 42
+local TAB_SLIDE_IN_INFO = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local TAB_SCALE_IN_INFO = TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+local TAB_SLIDE_OUT_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+
 function TabModule:SelectTab(Tab)
 	local Window = TabModule.Window
+	if TabModule.SelectedTab == Tab then
+		return
+	end
+
+	local PreviousTab = TabModule.SelectedTab
+	-- Slide towards the direction of travel in the tab list, like a page/stack transition.
+	local Direction = (PreviousTab ~= 0 and Tab < PreviousTab) and -1 or 1
 
 	TabModule.SelectedTab = Tab
 
@@ -1723,23 +1746,44 @@ function TabModule:SelectTab(Tab)
 	Window.TabDisplay.Text = TabModule.Tabs[Tab].Name
 	Window.SelectorPosMotor:setGoal(Spring(TabModule:GetCurrentTabPos(), Creator.SpringPresets.Bounce))
 
-	Window.ContainerPosMotor:setGoal(Spring(15, Creator.SpringPresets.Snap))
-	Window.ContainerBackMotor:setGoal(Spring(1, Creator.SpringPresets.Snap))
-
 	TabModule.SwapToken = (TabModule.SwapToken or 0) + 1
 	local Token = TabModule.SwapToken
 
-	task.delay(0.1, function()
-		if TabModule.SwapToken ~= Token then
-			return
-		end
-		for _, Container in next, TabModule.Containers do
-			Container.Visible = false
-		end
-		TabModule.Containers[Tab].Visible = true
-		Window.ContainerPosMotor:setGoal(Spring(0, Creator.SpringPresets.Bounce))
-		Window.ContainerBackMotor:setGoal(Spring(0, { frequency = 8, dampingRatio = 0.9 }))
-	end)
+	local NewTabObject = TabModule.Tabs[Tab]
+	local NewContainer = NewTabObject.ContainerFrame
+	local OldTabObject = PreviousTab ~= 0 and TabModule.Tabs[PreviousTab] or nil
+	local OldContainer = OldTabObject and OldTabObject.ContainerFrame or nil
+
+	-- Bring the incoming tab in immediately (no hidden gap/flicker) from the side,
+	-- with a light bounce-in scale, while the outgoing tab slides out the other way.
+	-- This only tweens Position/Scale on plain Frames, which is essentially free -
+	-- unlike animating a CanvasGroup's GroupTransparency every frame.
+	NewContainer.ZIndex = 2
+	NewContainer.Position = UDim2.fromOffset(TAB_SLIDE_OFFSET * Direction, 0)
+	NewTabObject.ContainerScale.Scale = 0.965
+	NewContainer.Visible = true
+
+	TweenService:Create(NewContainer, TAB_SLIDE_IN_INFO, {
+		Position = UDim2.fromOffset(0, 0),
+	}):Play()
+	TweenService:Create(NewTabObject.ContainerScale, TAB_SCALE_IN_INFO, {
+		Scale = 1,
+	}):Play()
+
+	if OldContainer then
+		OldContainer.ZIndex = 1
+		local SlideOut = TweenService:Create(OldContainer, TAB_SLIDE_OUT_INFO, {
+			Position = UDim2.fromOffset(-TAB_SLIDE_OFFSET * Direction, 0),
+		})
+		SlideOut:Play()
+		SlideOut.Completed:Once(function()
+			if TabModule.SwapToken ~= Token then
+				return
+			end
+			OldContainer.Visible = false
+			OldContainer.Position = UDim2.fromOffset(0, 0)
+		end)
+	end
 end
 
 return TabModule
@@ -2196,24 +2240,25 @@ return function(Config)
 		},
 	})
 
+	-- NOTE: previously this content area was wrapped in a CanvasGroup so the whole
+	-- tab could be faded via GroupTransparency. CanvasGroup forces the engine to
+	-- rasterize the entire subtree to an offscreen texture on every property step,
+	-- which is what caused the FPS drop / stutter while switching tabs. Tab
+	-- transitions are now done with plain Position/UIScale tweens on each tab's
+	-- own container (see Tab.lua), which is essentially free performance-wise.
 	Window.ContainerHolder = New("Frame", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
-	})
-
-	Window.ContainerAnim = New("CanvasGroup", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-	}, {
-		Window.ContainerHolder,
+		ClipsDescendants = true,
 	})
 
 	Window.ContainerCanvas = New("Frame", {
 		Size = UDim2.new(1, -Window.TabWidth - 32, 1, -102),
 		Position = UDim2.fromOffset(Window.TabWidth + 26, 90),
 		BackgroundTransparency = 1,
+		ClipsDescendants = true,
 	}, {
-		Window.ContainerAnim,
+		Window.ContainerHolder,
 	})
 
 	local EntranceScale = New("UIScale", { Scale = 0.9 })
@@ -2263,8 +2308,6 @@ return function(Config)
 
 	Window.SelectorPosMotor = Flipper.SingleMotor.new(17)
 	Window.SelectorSizeMotor = Flipper.SingleMotor.new(0)
-	Window.ContainerBackMotor = Flipper.SingleMotor.new(0)
-	Window.ContainerPosMotor = Flipper.SingleMotor.new(94)
 
 	SizeMotor:onStep(function(values)
 		Window.Root.Size = UDim2.new(0, values.X, 0, values.Y)
@@ -2294,16 +2337,8 @@ return function(Config)
 		Selector.Size = UDim2.new(0, 4, 0, Value)
 	end)
 
-	Window.ContainerBackMotor:onStep(function(Value)
-		Window.ContainerAnim.GroupTransparency = Value
-	end)
-
-	Window.ContainerPosMotor:onStep(function(Value)
-		Window.ContainerAnim.Position = UDim2.fromOffset(0, Value)
-	end)
-
-	local OldSizeX
-	local OldSizeY
+	local OldSizeX = Window.Size.X.Offset
+	local OldSizeY = Window.Size.Y.Offset
 	Window.Maximize = function(Value, NoPos, Instant)
 		Window.Maximized = Value
 		Window.TitleBar.MaxButton.Frame.Icon.Image = Value and Assets.Restore or Assets.Max
@@ -2312,8 +2347,11 @@ return function(Config)
 			OldSizeX = Window.Size.X.Offset
 			OldSizeY = Window.Size.Y.Offset
 		end
-		local SizeX = Value and Camera.ViewportSize.X or OldSizeX
-		local SizeY = Value and Camera.ViewportSize.Y or OldSizeY
+		-- Fall back to the last known size if we somehow never captured one
+		-- (e.g. Restore fired without a matching Maximize first) so shrinking
+		-- back down always does something instead of silently failing.
+		local SizeX = Value and Camera.ViewportSize.X or (OldSizeX or Window.Size.X.Offset)
+		local SizeY = Value and Camera.ViewportSize.Y or (OldSizeY or Window.Size.Y.Offset)
 		SizeMotor:setGoal({
 			X = Flipper[Instant and "Instant" or "Spring"].new(SizeX, Creator.SpringPresets.Smooth),
 			Y = Flipper[Instant and "Instant" or "Spring"].new(SizeY, Creator.SpringPresets.Smooth),
@@ -2368,6 +2406,16 @@ return function(Config)
 		then
 			Resizing = true
 			ResizePos = Input.Position
+
+			-- If the window was maximized, dragging the resize handle should behave
+			-- like a manual restore: clear the Maximized flag/icon now so the state
+			-- doesn't go stale (previously this let the flag and real size disagree,
+			-- which is why "shrink back" via the restore button could silently do
+			-- nothing after a manual resize).
+			if Window.Maximized then
+				Window.Maximized = false
+				Window.TitleBar.MaxButton.Frame.Icon.Image = Assets.Max
+			end
 		end
 	end)
 
