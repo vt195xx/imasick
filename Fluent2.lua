@@ -1686,9 +1686,10 @@ end
 
 -- How far (in pixels) the incoming/outgoing tab content slides during the swap.
 local TAB_SLIDE_OFFSET = 42
-local TAB_SLIDE_IN_INFO = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-local TAB_SCALE_IN_INFO = TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-local TAB_SLIDE_OUT_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+local TAB_SLIDE_IN_INFO = TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local TAB_SCALE_IN_INFO = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+-- Old tab needs to get out of the way fast so the swap feels instant, not laggy.
+local TAB_SLIDE_OUT_INFO = TweenInfo.new(0.13, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 
 -- ===== Per-element staggered entrance (Toggle / Button / Dropdown / ...) =====
 -- Every individual widget inside the incoming tab slides in from the left,
@@ -1696,14 +1697,18 @@ local TAB_SLIDE_OUT_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.Easin
 -- eases back - one widget after another instead of the whole tab popping
 -- in at once.
 local ELEMENT_SLIDE_OFFSET = 46
-local ELEMENT_STAGGER = 0.4 -- delay between each widget's entrance, in seconds
+local ELEMENT_STAGGER = 0.045 -- delay between each widget's entrance, in seconds
 -- Delay is capped so a tab with a LOT of widgets doesn't take forever to
 -- finish appearing - anything past the cap starts at the same time as the
 -- capped one. Raise/lower ELEMENT_STAGGER_CAP or ELEMENT_STAGGER above to
 -- taste.
-local ELEMENT_STAGGER_CAP = 2.0
-local ELEMENT_SLIDE_INFO = TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-local ELEMENT_FADE_INFO = TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local ELEMENT_STAGGER_CAP = 0.35
+local ELEMENT_SLIDE_INFO = TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+local ELEMENT_FADE_INFO = TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+-- How much of the viewport (in pixels, beyond its visible edges) counts as
+-- "about to be seen" - widgets scrolled into this margin start animating
+-- slightly before they're actually on screen so nothing pops in bare.
+local REVEAL_MARGIN = 80
 
 local function CollectWidgets(Container)
 	local Widgets = {}
@@ -1713,6 +1718,35 @@ local function CollectWidgets(Container)
 		end
 	end
 	return Widgets
+end
+
+-- Each widget is only ever animated once in its lifetime (the first time
+-- it's shown on screen), and its "home" position is captured exactly once,
+-- the first time we look at it - never re-read while a tween might still be
+-- mid-flight. This is what prevents the drift/soft-lock that used to happen
+-- when a tab was swapped back and forth quickly.
+local RevealedWidgets = setmetatable({}, { __mode = "k" })
+local WidgetHomePosition = setmetatable({}, { __mode = "k" })
+
+local function GetHomePosition(Widget)
+	local Home = WidgetHomePosition[Widget]
+	if not Home then
+		Home = Widget.Position
+		WidgetHomePosition[Widget] = Home
+	end
+	return Home
+end
+
+-- Is this widget currently inside (or just about to scroll into) the
+-- ScrollingFrame's visible window? Uses AbsolutePosition so it works no
+-- matter how deeply the widget is nested (Section, etc.) and automatically
+-- accounts for the current scroll offset.
+local function IsWidgetInView(Widget, Container)
+	local ContainerTop = Container.AbsolutePosition.Y
+	local ContainerHeight = Container.AbsoluteSize.Y
+	local WidgetTop = Widget.AbsolutePosition.Y - ContainerTop
+	local WidgetBottom = WidgetTop + Widget.AbsoluteSize.Y
+	return WidgetBottom > -REVEAL_MARGIN and WidgetTop < ContainerHeight + REVEAL_MARGIN
 end
 
 -- Fades a single GuiObject/UIStroke's relevant transparency property in from
@@ -1749,13 +1783,13 @@ local function FadeDescendantIn(Descendant, TweenInfoObj)
 	end
 end
 
--- Slides + fades one widget in, after `Delay` seconds, and makes sure a
--- rapid tab-swap (SwapToken changes mid-flight) doesn't leave it stuck
--- hidden or mid-animation.
-local function AnimateWidgetIn(Widget, Delay, Token)
-	local OriginalPosition = Widget.Position
+-- Slides + fades one widget in, after `Delay` seconds. The widget's home
+-- position is fixed (cached) up front, so once this starts it always lands
+-- in the right place - it never reads a stale/mid-tween Position.
+local function AnimateWidgetIn(Widget, Delay)
+	local Home = GetHomePosition(Widget)
 
-	Widget.Position = OriginalPosition + UDim2.fromOffset(-ELEMENT_SLIDE_OFFSET, 0)
+	Widget.Position = Home + UDim2.fromOffset(-ELEMENT_SLIDE_OFFSET, 0)
 
 	for _, Descendant in ipairs(Widget:GetDescendants()) do
 		FadeDescendantIn(Descendant, ELEMENT_FADE_INFO)
@@ -1763,10 +1797,7 @@ local function AnimateWidgetIn(Widget, Delay, Token)
 	FadeDescendantIn(Widget, ELEMENT_FADE_INFO)
 
 	local function Play()
-		if TabModule.SwapToken ~= Token then
-			return
-		end
-		TweenService:Create(Widget, ELEMENT_SLIDE_INFO, { Position = OriginalPosition }):Play()
+		TweenService:Create(Widget, ELEMENT_SLIDE_INFO, { Position = Home }):Play()
 	end
 
 	if Delay <= 0 then
@@ -1776,11 +1807,28 @@ local function AnimateWidgetIn(Widget, Delay, Token)
 	end
 end
 
-local function AnimateTabContentIn(Container, Token)
+-- Reveals whichever of this tab's widgets are currently visible (or about
+-- to be scrolled into view) and haven't been animated yet. Called once when
+-- the tab is selected, and again every time the user scrolls - so widgets
+-- further down a long tab play their entrance the moment they actually
+-- become visible, instead of only ever animating once at tab-swap time.
+-- Each widget is skipped forever after its first reveal (RevealedWidgets),
+-- so this is always safe to call repeatedly.
+local function RevealWidgetsInView(Tab)
+	local Container = Tab.ContainerFrame
+	if not Container.Visible then
+		return
+	end
+
 	local Widgets = CollectWidgets(Container)
-	for Index, Widget in ipairs(Widgets) do
-		local Delay = math.min((Index - 1) * ELEMENT_STAGGER, ELEMENT_STAGGER_CAP)
-		AnimateWidgetIn(Widget, Delay, Token)
+	local RevealIndex = 0
+	for _, Widget in ipairs(Widgets) do
+		if not RevealedWidgets[Widget] and IsWidgetInView(Widget, Container) then
+			RevealedWidgets[Widget] = true
+			local Delay = math.min(RevealIndex * ELEMENT_STAGGER, ELEMENT_STAGGER_CAP)
+			AnimateWidgetIn(Widget, Delay)
+			RevealIndex = RevealIndex + 1
+		end
 	end
 end
 
@@ -1837,7 +1885,17 @@ function TabModule:SelectTab(Tab)
 	-- Widgets inside the new tab (Toggle, Button, Dropdown, ...) each slide
 	-- in from the left and fade in, one after another, with a slight
 	-- overshoot as they settle - instead of just popping in all together.
-	AnimateTabContentIn(NewContainer, Token)
+	-- Only the ones currently visible get animated now; anything further
+	-- down the tab plays its entrance as it's scrolled into view (hooked
+	-- below, once per tab).
+	RevealWidgetsInView(NewTabObject)
+
+	if not NewTabObject.ScrollRevealHooked then
+		NewTabObject.ScrollRevealHooked = true
+		Creator.AddSignal(NewContainer:GetPropertyChangedSignal("CanvasPosition"), function()
+			RevealWidgetsInView(NewTabObject)
+		end)
+	end
 
 	if OldContainer then
 		OldContainer.ZIndex = 1
@@ -2637,11 +2695,19 @@ local Creator = {
 	Signals = {},
 	TransparencyMotors = {},
 
+	-- Bounce/Pop used to be quite underdamped (dampingRatio 0.5-0.55), which
+	-- oscillates back and forth before settling. On big, slow-moving things
+	-- (dialogs opening, the tab selector pill) that reads as a nice bounce -
+	-- but on small/fast changes like a UIScale press-in on text (0.94 -> 1)
+	-- the same oscillation is only a few pixels wide and just looks like
+	-- stutter/jitter. Raising dampingRatio keeps a light springy feel
+	-- without the visible wobble; frequency is bumped up a bit alongside it
+	-- so things still settle quickly instead of feeling slow.
 	SpringPresets = {
 		Smooth = { frequency = 5, dampingRatio = 0.92 },
 		Snap = { frequency = 8, dampingRatio = 0.8 },
-		Bounce = { frequency = 6.5, dampingRatio = 0.55 },
-		Pop = { frequency = 9.5, dampingRatio = 0.5 },
+		Bounce = { frequency = 7, dampingRatio = 0.85 },
+		Pop = { frequency = 9, dampingRatio = 0.8 },
 		Glow = { frequency = 4.5, dampingRatio = 1 },
 	},
 	BounceInfo = TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
